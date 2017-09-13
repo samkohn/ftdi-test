@@ -27,15 +27,46 @@ int main(int argc, char* argv[])
         ftdi_free(ftdi);
         return EXIT_FAILURE;
     }
-    ftdi_usb_reset(ftdi);
-    //ftdi_setflowctrl(ftdi, SIO_RTS_CTS_HS);
-
-    unsigned char channel = 0;
-    if (argc == 2)
+    ret = ftdi_usb_reset(ftdi);
+    ret |= ftdi_setflowctrl(ftdi, SIO_RTS_CTS_HS);
+    ret |= ftdi_set_bitmode(ftdi, 0x0, BITMODE_RESET);
+    ret |= ftdi_set_bitmode(ftdi, 0x0, BITMODE_MPSSE);
+    if(ret != 0)
     {
-        channel = atoi(argv[1]);
+        fprintf(stderr, "unable to setup bitmode: %d (%s)\n", ret, ftdi_get_error_string(ftdi));
+        ftdi_free(ftdi);
+        return EXIT_FAILURE;
     }
-    ftdi_set_bitmode(ftdi, channel, BITMODE_RESET);
+
+    unsigned char buffer[8];
+    buffer[0] = 0x84; // to enable loopback
+    ret = ftdi_write_data(ftdi, buffer, 1);
+    if(ret != 1)
+    {
+        fprintf(stderr, "unable to set loopback: %d (%s)\n", ret, ftdi_get_error_string(ftdi));
+        ftdi_free(ftdi);
+        return EXIT_FAILURE;
+    }
+
+    buffer[0] = 0xAB; // Bad command
+    ret = ftdi_write_data(ftdi, buffer, 1);
+    if(ret != 1)
+    {
+        fprintf(stderr, "unable to set loopback: %d (%s)\n", ret, ftdi_get_error_string(ftdi));
+        ftdi_free(ftdi);
+        return EXIT_FAILURE;
+    }
+
+    ret = ftdi_read_data(ftdi, buffer, 2);
+    if(ret <= 0)
+    {
+        fprintf(stderr, "unable to read data: %d (%s)\n", ret, ftdi_get_error_string(ftdi));
+        ftdi_free(ftdi);
+        return EXIT_FAILURE;
+    }
+    printf("%d bytes read: 0x%02X 0x%02X\n", ret, buffer[0], buffer[1]);
+
+
     ftdi_set_baudrate(ftdi, 1000000);
 
     // Try to print alternating bits
