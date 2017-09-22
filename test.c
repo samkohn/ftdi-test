@@ -16,12 +16,12 @@ int main(int argc, char* argv[])
         fprintf(stderr, "ftdi_new failed\n");
         return EXIT_FAILURE;
     }
-    ftdi_init(ftdi);
+    /*ftdi_init(ftdi);*/
     version = ftdi_get_library_version();
     printf("Initialized libftdi %s (major: %d, minor: %d, micro: %d, snapshot ver: %s)\n",
             version.version_str, version.major, version.minor, version.micro,
             version.snapshot_str);
-    if ((ret = ftdi_usb_open(ftdi, 0x0403, 0x6010)) < 0)
+    if ((ret = ftdi_usb_open(ftdi, 0x0403, 0x6001)) < 0)
     {
         fprintf(stderr, "unable to open ftdi device: %d (%s)\n", ret, ftdi_get_error_string(ftdi));
         ftdi_free(ftdi);
@@ -29,6 +29,8 @@ int main(int argc, char* argv[])
     }
     ret = ftdi_usb_reset(ftdi);
     ret |= ftdi_setflowctrl(ftdi, SIO_RTS_CTS_HS);
+    ret |= ftdi_set_event_char(ftdi, 0, 0);
+    ret |= ftdi_set_error_char(ftdi, 0, 0);
     ret |= ftdi_set_bitmode(ftdi, 0x0, BITMODE_RESET);
     ret |= ftdi_set_bitmode(ftdi, 0x0, BITMODE_MPSSE);
     if(ret != 0)
@@ -95,7 +97,7 @@ int main(int argc, char* argv[])
     }
 
     // Set clock rate
-    unsigned int divisor = 0x05DB;
+    unsigned int divisor = 0x0002;
     buffer[0] = '\x86'; // Prepare to set clock divisor
     buffer[1] = divisor & 0xFF;
     buffer[2] = (divisor >> 8) & 0xFF;
@@ -147,12 +149,15 @@ int main(int argc, char* argv[])
 
     // Time for communication
     buffer[0] = 0x10; // Output on rising CK, no input, MSB first, clock bytes out
-    buffer[1] = 0x01; // Length L
+    buffer[1] = 0x05; // Length L
     buffer[2] = 0x00; // Length H  // Somehow length gets 1 added to it for a total of 2
-    buffer[3] = 0xAF; // Data byte 1
-    buffer[4] = 0x0F; // Data byte 2
-    ret = ftdi_write_data(ftdi, buffer, 5);
-    if(ret != 5)
+    buffer[3] = 0xAB; // Data byte 1
+    buffer[4] = 0xAB; // Data byte 2
+    buffer[5] = 0xAB; // Data byte 3
+    buffer[6] = 0xAB; // Data byte 4
+    buffer[7] = 0xAB; // Data byte 5
+    ret = ftdi_write_data(ftdi, buffer, 8);
+    if(ret != 8)
     {
         fprintf(stderr, "transmission failed: %d (%s)\n", ret, ftdi_get_error_string(ftdi));
         ftdi_free(ftdi);
