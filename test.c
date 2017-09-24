@@ -108,6 +108,10 @@ int main(int argc, char* argv[])
         ftdi_free(ftdi);
         return EXIT_FAILURE;
     }
+    buffer[0] = 0x8E;
+    buffer[1] = 0x10;
+    ret = ftdi_write_data(ftdi, buffer, 2);
+
 
     /* these are the "low-byte" pins
      * pin  type     in/out  initial state
@@ -122,7 +126,7 @@ int main(int argc, char* argv[])
      */
     buffer[0] = 0x80; // configure data bits low-byte of MPSSE port (TODO)
     buffer[1] = 0xC9; // initial state configuration
-    buffer[2] = 0xFB; // in/out configuration
+    buffer[2] = 0xEB; // in/out configuration
     ret = ftdi_write_data(ftdi, buffer, 3);
     if(ret != 3)
     {
@@ -130,15 +134,28 @@ int main(int argc, char* argv[])
         ftdi_free(ftdi);
         return EXIT_FAILURE;
     }
+    unsigned char writedata[65539];
+    static const unsigned int size = 32;
+    for(unsigned int i = 0; i < size; ++i)
+    {
+        writedata[i*3] = 0x82; // GPIO high-bytes
+        if(i%2 == 0)
+        {
+            writedata[i*3+1] = 0x00; // value
+        }
+        else
+        {
+            writedata[i*3+1] = 0xFF;
+        }
+        writedata[i*3+2] = 0xFF; // in/out
+    }
+    ret = ftdi_write_data(ftdi, writedata, size*3);
 
     // Now configure the high-byte pins (All GPIO, input, initial state
     // low)
     buffer[0] = 0x82; // configure the high-byte port (TODO)
     buffer[1] = 0x00; // initial state
-    buffer[2] = 0x00; // in/out
-    buffer[0] = 0x80; // configure data bits low-byte of MPSSE port (TODO)
-    buffer[1] = 0xC9; // initial state configuration
-    buffer[2] = 0xFB; // in/out configuration
+    buffer[2] = 0xFF; // in/out
     ret = ftdi_write_data(ftdi, buffer, 3);
     if(ret != 3)
     {
@@ -148,21 +165,39 @@ int main(int argc, char* argv[])
     }
 
     // Time for communication
-    buffer[0] = 0x10; // Output on rising CK, no input, MSB first, clock bytes out
-    buffer[1] = 0x05; // Length L
-    buffer[2] = 0x00; // Length H  // Somehow length gets 1 added to it for a total of 2
-    buffer[3] = 0xAB; // Data byte 1
-    buffer[4] = 0xAB; // Data byte 2
-    buffer[5] = 0xAB; // Data byte 3
-    buffer[6] = 0xAB; // Data byte 4
-    buffer[7] = 0xAB; // Data byte 5
-    ret = ftdi_write_data(ftdi, buffer, 8);
-    if(ret != 8)
+    writedata[0] = 0x31; // Output on rising CK, no input, MSB first, clock bytes out
+    writedata[1] = 0x20; // Length L
+    writedata[2] = 0x00; // Length H  // Somehow length gets 1 added to it for a total of 2
+    for(unsigned int i = 3; i < 3+size; ++i)
+    {
+        writedata[i] = (i-3) % 256;
+        printf(" %02X ", writedata[i]);
+    }
+    ret = ftdi_write_data(ftdi, writedata, size+3);
+    if(ret != size+3)
     {
         fprintf(stderr, "transmission failed: %d (%s)\n", ret, ftdi_get_error_string(ftdi));
         ftdi_free(ftdi);
         return EXIT_FAILURE;
     }
+    unsigned char readdata[65536];
+    ret = ftdi_read_data(ftdi, readdata, size);
+    printf("ret = %d\n", ret);
+    int incorrect = 0;
+    for(int i = 0; i < size; ++i)
+    {
+        if(readdata[i] == i % 256)
+        {
+            printf(" %02X ", readdata[i]);
+        }
+        else
+        {
+            printf("X%02X ", readdata[i]);
+            ++incorrect;
+        }
+    }
+    printf("Number of incorrect bytes: %d\n", incorrect);
+
 
 
     /*
